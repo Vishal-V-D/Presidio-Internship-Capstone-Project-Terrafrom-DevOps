@@ -49,17 +49,24 @@ variable "course_container_port" {
   default = 8082
 }
 
-variable "user_env_vars" {
-  type    = list(object({ name = string, value = string }))
-  default = []
-}
 
-variable "course_env_vars" {
-  type    = list(object({ name = string, value = string }))
-  default = []
-}
 
 variable "tags" {
   type    = map(string)
   default = {}
+}
+
+
+variable "user_secret_vars" {
+  type = list(object({
+    name      = string
+    valueFrom = string
+  }))
+}
+
+variable "course_secret_vars" {
+  type = list(object({
+    name      = string
+    valueFrom = string
+  }))
 }

@@ -84,11 +84,6 @@ module "ecs" {
   vpc_id     = data.aws_vpc.default.id
   subnet_ids = data.aws_subnets.default.ids
 
-  user_env_vars = [
-    { name = "APP_ENV", value = "dev" }
-  ]
-
-  course_env_vars = [
-    { name = "APP_ENV", value = "dev" }
-  ]
+  user_secret_vars   = var.user_secret_vars
+  course_secret_vars = var.course_secret_vars
 }

@@ -42,10 +42,6 @@ resource "aws_security_group" "ecs_sg" {
 
   tags = var.tags
 }
-
-# ----------------------------------------------------
-# Task Definition
-# ----------------------------------------------------
 resource "aws_ecs_task_definition" "this" {
   family                   = var.service_name
   network_mode             = "awsvpc"
@@ -62,7 +58,7 @@ resource "aws_ecs_task_definition" "this" {
         containerPort = var.user_container_port
         protocol      = "tcp"
       }]
-      environment = var.user_env_vars
+      secrets = var.user_secret_vars
     },
     {
       name  = "course-service"
@@ -71,7 +67,7 @@ resource "aws_ecs_task_definition" "this" {
         containerPort = var.course_container_port
         protocol      = "tcp"
       }]
-      environment = var.course_env_vars
+      secrets = var.course_secret_vars
     }
   ])
 }
