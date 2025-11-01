@@ -49,3 +49,11 @@ output "databases_connection_info" {
   value       = module.rds.databases_connection_info
   sensitive   = true
 }
+
+output "ecr_url" {
+  value = module.ecr_backend.repository_url
+}
+
+output "ecs_cluster_name" {
+  value = module.ecs.cluster_name
+}
