@@ -23,3 +23,5 @@ terraform.rc
 
 # Sensitive files you may have locally (like .env)
 .env
+
+*.md

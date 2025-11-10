@@ -1,0 +1,134 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '../../week6/**'
+      - '../../rag-pipeline/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: quantum-judge-dev
+
+jobs:
+  build-user-contest:
+    name: Build User Contest Service
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Service Code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/user-contest-service
+          path: user-contest-service
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build, Tag, and Push Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: user-contest-service-latest
+        run: |
+          cd user-contest-service
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+  build-submission:
+    name: Build Submission Service
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Service Code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/submission-service
+          path: submission-service
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build, Tag, and Push Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: submission-service-latest
+        run: |
+          cd submission-service
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+  build-rag-pipeline:
+    name: Build RAG Pipeline
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Service Code
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/rag-pipeline
+          path: rag-pipeline
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Build, Tag, and Push Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: rag-pipeline-latest
+        run: |
+          cd rag-pipeline
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+  update-ecs:
+    name: Update ECS Service
+    runs-on: ubuntu-latest
+    needs: [build-user-contest, build-submission, build-rag-pipeline]
+    
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Force New Deployment
+        run: |
+          aws ecs update-service \
+            --cluster quantum-judge-dev \
+            --service quantum-judge-service-dev \
+            --force-new-deployment
+      
+      - name: Wait for Deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster quantum-judge-dev \
+            --services quantum-judge-service-dev

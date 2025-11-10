@@ -1,7 +1,5 @@
-# Single ECR repository for all quantum-judge services
-# Images: user-contest-service, submission-service, rag-pipeline
-resource "aws_ecr_repository" "quantum_judge" {
-  name                 = "quantum-judge-${var.environment}"
+resource "aws_ecr_repository" "submission" {
+  name                 = "submission-service-${var.environment}"
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -13,27 +11,27 @@ resource "aws_ecr_repository" "quantum_judge" {
   }
 
   tags = merge(var.tags, {
-    Name        = "quantum-judge-${var.environment}"
+    Name        = "submission-service-${var.environment}"
     Project     = "QuantumJudge"
     Environment = var.environment
     ManagedBy   = "Terraform"
+    Service     = "submission-service"
   })
 }
 
-# Lifecycle policy to keep only latest 3 images per service (free-tier optimization)
-resource "aws_ecr_lifecycle_policy" "quantum_judge_policy" {
-  repository = aws_ecr_repository.quantum_judge.name
+resource "aws_ecr_lifecycle_policy" "submission" {
+  repository = aws_ecr_repository.submission.name
 
   policy = jsonencode({
     rules = [
       {
         rulePriority = 1
-        description  = "Keep only 3 images per service tag"
+        description  = "Keep only latest 5 submission-service images"
         selection = {
           tagStatus     = "tagged"
-          tagPrefixList = ["user-contest-service", "submission-service", "rag-pipeline"]
+          tagPrefixList = ["submission-service"]
           countType     = "imageCountMoreThan"
-          countNumber   = 3
+          countNumber   = 5
         }
         action = {
           type = "expire"
@@ -41,7 +39,7 @@ resource "aws_ecr_lifecycle_policy" "quantum_judge_policy" {
       },
       {
         rulePriority = 2
-        description  = "Expire untagged images after 1 day"
+        description  = "Expire untagged submission images after 1 day"
         selection = {
           tagStatus   = "untagged"
           countType   = "sinceImagePushed"

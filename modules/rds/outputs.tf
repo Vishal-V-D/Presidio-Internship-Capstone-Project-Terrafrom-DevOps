@@ -42,20 +42,30 @@ output "security_group_id" {
 output "databases_connection_info" {
   description = "Connection info for all databases inside the RDS instance"
   value = {
-    user_service = {
+    quantum_judge = {
       host        = aws_db_instance.main.address
       port        = aws_db_instance.main.port
-      database    = "user_service"
+      database    = "quantum_judge"
       username    = aws_db_instance.main.username
       secret_name = aws_secretsmanager_secret.db_credentials.name
+      description = "User contest service database"
     }
-    course_service = {
+    submission_db = {
       host        = aws_db_instance.main.address
       port        = aws_db_instance.main.port
-      database    = "course_service"
+      database    = "submission_db"
       username    = aws_db_instance.main.username
       secret_name = aws_secretsmanager_secret.db_credentials.name
+      description = "Submission service database"
     }
   }
   sensitive = true
+}
+
+output "database_names" {
+  description = "Names of databases in the RDS instance"
+  value = [
+    "quantum_judge",
+    "submission_db"
+  ]
 }

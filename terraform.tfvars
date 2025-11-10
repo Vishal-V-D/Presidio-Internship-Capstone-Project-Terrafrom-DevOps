@@ -1,67 +1,90 @@
-# ------------------------------------------------
-# Global
-# ------------------------------------------------
-aws_region     = "us-east-1"
-environment    = "dev"
-cluster_name   = "smart-learning-dev"
-service_name   = "smart-learning-backend-dev"
+# ================================================
+# QUANTUM JUDGE - TERRAFORM CONFIGURATION
+# ================================================
+# Professional naming standards applied throughout
+# Single ECR repo with 3 image tags
+# Single Fargate task with 3 containers
+# Single RDS with 2 databases (quantum_judge, submission_db)
+# Free tier optimized configuration
+# ================================================
 
 # ------------------------------------------------
-# Networking
+# Global Configuration
 # ------------------------------------------------
-vpc_id     = "vpc-0abc1234567890def"
-subnet_ids = ["subnet-01abcd2345efgh678", "subnet-09ijkl0123mnop456"]
+aws_region  = "us-east-1"
+environment = "dev"
 
 # ------------------------------------------------
-# ECR and ECS
+# User Contest Service (Port 4000)
 # ------------------------------------------------
-ecr_url        = "071784445140.dkr.ecr.us-east-1.amazonaws.com/smart-learning-backend-dev"
-rds_secret_arn = "arn:aws:secretsmanager:us-east-1:071784445140:secret:myapp-db-dev20251101113557721600000003-zoZSrj"
-
-user_container_port   = 8080
-course_container_port = 8081
-desired_count         = 1
-assign_public_ip      = true
-
-# ------------------------------------------------
-# Env vars for containers
-# ------------------------------------------------
-user_env_vars = [
-  { name = "DB_HOST", value = "myapp-db-dev.capsi2agwav9.us-east-1.rds.amazonaws.com" },
-  { name = "DB_USER", value = "admin" },
-  { name = "DB_PORT", value = "3306" },
-  { name = "PORT", value = "8080" },
-  { name = "ENV", value = "dev" }
+# Database: quantum_judge
+user_contest_env_vars = [
+  { name = "PORT", value = "4000" },
+  { name = "NODE_ENV", value = "production" },
+  { name = "SERVICE_NAME", value = "user-contest-service" },
+  
+  # JWT Configuration
+  { name = "JWT_EXPIRES_IN", value = "3h" }
 ]
 
-course_env_vars = [
-  { name = "DB_HOST", value = "myapp-db-dev.capsi2agwav9.us-east-1.rds.amazonaws.com" },
-  { name = "DB_USER", value = "admin" },
-  { name = "DB_PORT", value = "3306" },
-  { name = "PORT", value = "8081" },
-  { name = "ENV", value = "dev" }
-]
-
-user_secret_vars = [
-  {
-    name      = "DB_PASSWORD"
-    valueFrom = "arn:aws:secretsmanager:us-east-1:071784445140:secret:myapp-db-dev20251101113557721600000003-zoZSrj"
-  }
-]
-
-course_secret_vars = [
-  {
-    name      = "DB_PASSWORD"
-    valueFrom = "arn:aws:secretsmanager:us-east-1:071784445140:secret:myapp-db-dev20251101113557721600000003-zoZSrj"
-  }
+user_contest_secret_vars = [
+  # Additional secrets (if any) will be merged automatically; leave empty.
 ]
 
 # ------------------------------------------------
-# Tags
+# Submission Service (Port 5000)
 # ------------------------------------------------
-tags = {
-  Project     = "SmartLearning"
-  Environment = "dev"
-  Owner       = "Vishal"
-  Scope       = "PPI"
-}
+# Database: submission_db
+submission_env_vars = [
+  { name = "PORT", value = "5000" },
+  { name = "NODE_ENV", value = "development" },
+  { name = "SERVICE_NAME", value = "submission-service" },
+  
+  # Inter-service Communication (localhost works in same task)
+  { name = "USER_CONTEST_SERVICE_URL", value = "http://localhost:4000" },
+  
+  # GenAI Configuration
+  { name = "GENAI_API_URL", value = "http://localhost:8000/api/ai/feedback" },
+  
+  # JWT Configuration
+  { name = "JWT_EXPIRES_IN", value = "3h" }
+]
+
+submission_secret_vars = [
+  # Additional secrets (if any) will be merged automatically; leave empty.
+]
+
+# ------------------------------------------------
+# RAG Pipeline Service (Port 8000)
+# ------------------------------------------------
+rag_pipeline_env_vars = [
+  { name = "PORT", value = "8000" },
+  { name = "NODE_ENV", value = "development" },
+  { name = "SERVICE_NAME", value = "rag-pipeline" },
+  
+  # Gemini AI Configuration
+  { name = "GEMINI_API_URL", value = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" },
+  
+  # Vector Store Configuration
+  { name = "VECTORSTORE_DIR", value = "embeddings" }
+]
+
+rag_pipeline_secret_vars = [
+  # Additional secrets (if any) will be merged automatically; leave empty.
+]
+
+# ------------------------------------------------
+# EC2 Submission Service (Docker-in-Docker)
+# ------------------------------------------------
+# Use EC2 for Docker-in-Docker support (required for code execution)
+use_ec2_for_submission = true
+
+# Instance type - t3.micro for FREE TIER testing
+submission_ec2_instance_type = "t3.micro"  # FREE (750h/month for 12 months)
+# Note: t3.micro has 1GB RAM - good for testing, may be slow under load
+# Upgrade to t3.small ($15/month) or t3.medium ($30/month) for production
+
+# SSH Access (disabled for security)
+enable_submission_ssh = false
+# submission_ssh_cidr_blocks = ["YOUR_IP/32"]  # Uncomment to enable SSH
+# submission_ec2_key_name = "your-key-pair"     # Uncomment to enable SSH

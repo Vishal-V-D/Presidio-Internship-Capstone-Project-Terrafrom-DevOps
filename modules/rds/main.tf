@@ -70,7 +70,7 @@ resource "aws_db_instance" "main" {
   instance_class            = var.db_instance_class
   allocated_storage         = var.allocated_storage
   storage_encrypted         = true
-  db_name                   = var.db_name
+  db_name                   = "quantum_judge"  # Primary database (auto-created)
   username                  = var.db_username
   password                  = random_password.db_password.result
   db_subnet_group_name      = aws_db_subnet_group.main.name
@@ -80,15 +80,68 @@ resource "aws_db_instance" "main" {
   backup_retention_period   = var.backup_retention_period
   skip_final_snapshot       = var.skip_final_snapshot
   parameter_group_name      = aws_db_parameter_group.main.name
-  tags                      = var.tags
+  
+  tags = merge(var.tags, {
+    Name = "quantum-judge-rds"
+    Note = "Contains 2 databases: quantum_judge and submission_db"
+  })
 }
 
+# Initialize additional databases after RDS is available
+resource "null_resource" "init_databases" {
+  depends_on = [
+    aws_db_instance.main,
+    aws_secretsmanager_secret_version.db_credentials
+  ]
 
-resource "null_resource" "additional_databases" {
-  depends_on = [aws_db_instance.main]
+  triggers = {
+    db_endpoint  = aws_db_instance.main.address
+    sql_checksum = filesha1("${path.module}/init_dbs.sql")
+  }
 
   provisioner "local-exec" {
-    command = "mysql -h ${aws_db_instance.main.address} -P ${aws_db_instance.main.port} -u ${var.db_username} -p${random_password.db_password.result} < ${path.module}/init_dbs.sql"
+    interpreter = ["PowerShell", "-Command"]
+    command     = <<-EOT
+      Write-Host "Initializing additional databases from init_dbs.sql..."
+      $awsRegion = "${var.aws_region}"
+      aws rds wait db-instance-available --db-instance-identifier ${aws_db_instance.main.identifier} --region $awsRegion
+
+      $secretJson = aws secretsmanager get-secret-value --secret-id ${aws_secretsmanager_secret.db_credentials.id} --query 'SecretString' --output text --region $awsRegion
+      if (-not $secretJson) {
+        throw "Failed to retrieve DB credentials from Secrets Manager."
+      }
+
+      try {
+        $secret = $secretJson | ConvertFrom-Json
+      } catch {
+        throw "Failed to parse DB secret JSON: $($_.Exception.Message)"
+      }
+      if (-not $secret) {
+        throw "Secret payload returned null/empty JSON."
+      }
+      if (-not (Get-Command mysql -ErrorAction SilentlyContinue)) {
+        throw "MySQL client not found. Please install the MySQL CLI to run Terraform with automatic DB initialization."
+      }
+
+      $dbUser = $secret.username
+      $dbPassword = $secret.password
+      if (-not $dbUser -or -not $dbPassword) {
+        throw "Secret payload missing 'username' or 'password' fields."
+      }
+
+      $env:MYSQL_PWD = $dbPassword
+      $mysqlHost = "${aws_db_instance.main.address}"
+      $mysqlPort = ${aws_db_instance.main.port}
+      $mysqlUser = $dbUser
+
+      Get-Content "${path.module}/init_dbs.sql" | mysql --host=$mysqlHost --port=$mysqlPort --user=$mysqlUser --ssl-mode=REQUIRED
+      if ($LASTEXITCODE -ne 0) {
+        throw "init_dbs.sql execution failed with exit code $LASTEXITCODE"
+      }
+
+      Remove-Item Env:MYSQL_PWD -ErrorAction SilentlyContinue
+      Write-Host "Database initialization completed."
+    EOT
   }
 }
 

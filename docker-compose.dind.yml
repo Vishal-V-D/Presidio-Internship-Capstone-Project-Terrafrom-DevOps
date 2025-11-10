@@ -1,0 +1,101 @@
+# ==================================================
+# DOCKER COMPOSE - DOCKER-IN-DOCKER SETUP
+# ==================================================
+# Use this for local testing of the submission service with DinD
+# Run: docker-compose -f docker-compose.dind.yml up
+# ==================================================
+
+version: '3.8'
+
+services:
+  # User Contest Service (Standard)
+  user-contest-service:
+    image: quantum-judge/user-contest-service:latest
+    container_name: user-contest-service
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - DB_HOST=${DB_HOST:-mysql-db}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-admin}
+      - DB_NAME=quantum_judge
+      - DB_PASS=${DB_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks:
+      - quantum-judge-network
+    restart: unless-stopped
+
+  # Submission Service (Docker-in-Docker)
+  submission-service:
+    # Use pre-built image from ECR or local build
+    image: submission-service
+    container_name: submission-service
+    privileged: true  # REQUIRED for Docker-in-Docker
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DB_HOST=${DB_HOST:-mysql-db}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USER=${DB_USER:-admin}
+      - DB_NAME=submission_db
+      - DB_PASS=${DB_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+      - GENAI_API_KEY=${GENAI_API_KEY}
+    volumes:
+      # Persistent storage for tmp files
+      - submission-tmp:/app/tmp
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    networks:
+      - quantum-judge-network
+    restart: unless-stopped
+    # Resource limits (adjust based on workload)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # RAG Pipeline (Standard)
+  rag-pipeline:
+    image: quantum-judge/rag-pipeline:latest
+    container_name: rag-pipeline
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    networks:
+      - quantum-judge-network
+    restart: unless-stopped
+
+volumes:
+  submission-tmp:
+    driver: local
+
+networks:
+  quantum-judge-network:
+    driver: bridge

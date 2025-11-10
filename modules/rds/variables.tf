@@ -80,3 +80,8 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "aws_region" {
+  description = "AWS region where RDS resources are created"
+  type        = string
+}
